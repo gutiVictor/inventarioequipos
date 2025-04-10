@@ -10,6 +10,9 @@ import {
 import { Search, Edit, Delete } from '@mui/icons-material';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+
+dayjs.extend(isSameOrBefore);
 
 function Reservations() {
   // Estados para datos
@@ -112,24 +115,31 @@ function Reservations() {
     if (!newReservation.fecha_inicio || !newReservation.fecha_fin) {
       return false;
     }
-    return dayjs(newReservation.fecha_inicio).isSameOrBefore(dayjs(newReservation.fecha_fin));
+    const startDate = dayjs(newReservation.fecha_inicio);
+    const endDate = dayjs(newReservation.fecha_fin);
+    return startDate.isSameOrBefore(endDate);
   };
 
-  // Manejador de envío del formulario
   const handleSubmit = async () => {
-    if (!validateDates()) {
-      setError('La fecha de inicio debe ser anterior o igual a la fecha de fin');
-      return;
-    }
-
     try {
-      if (isEditing) {
-        await axios.put(`http://localhost:3006/api/reservas/${selectedReservation.id}`, newReservation);
-      } else {
-        await axios.post('http://localhost:3006/api/reservas', newReservation);
+      if (!validateDates()) {
+        setError('La fecha de inicio debe ser anterior o igual a la fecha de fin');
+        return;
       }
+
+      const reservaData = {
+        ...newReservation,
+        fecha_reserva: dayjs().format('YYYY-MM-DD')
+      };
+
+      if (isEditing) {
+        await axios.put(`http://localhost:3006/api/reservas/${selectedReservation.id}`, reservaData);
+      } else {
+        await axios.post('http://localhost:3006/api/reservas', reservaData);
+      }
+      
       setOpenDialog(false);
-      fetchReservations();
+      await fetchReservations();
       setNewReservation({
         articulo_id: '',
         cliente_id: '',    
@@ -143,7 +153,7 @@ function Reservations() {
       setSelectedReservation(null);
     } catch (error) {
       console.error('Error saving reservation:', error);
-      setError(`Error al ${isEditing ? 'actualizar' : 'crear'} la reserva`);
+      setError(error.response?.data?.message || `Error al ${isEditing ? 'actualizar' : 'crear'} la reserva`);
     }
   };
 
@@ -233,75 +243,125 @@ function Reservations() {
         />
       </Box>
 
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
-        <DialogTitle>{isEditing ? 'Editar Reserva' : 'Nueva Reserva'}</DialogTitle>
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>{isEditing ? 'Editar Reserva' : 'Nueva Reserva'}</DialogTitle>
         <DialogContent>
-          <TextField
-            select
-            fullWidth
-            margin="normal"
-            name="cliente_id"
-            label="Cliente"
-            value={newReservation.cliente_id}
-            onChange={(e) => setNewReservation({ ...newReservation, cliente_id: e.target.value })}
-          >
-            {clients.map((client) => (
-              <MenuItem key={client.id} value={client.id}>
-                {`${client.nombre} ${client.apellido}`}
-              </MenuItem>
-            ))}
-          </TextField>
+          <Box sx={{ p: 1 }}>
+            <Grid container spacing={3}>
+              <Grid xs={12} sm={6}>
+                <TextField
+                  select
+                  fullWidth
+                  name="articulo_id"
+                  label="Artículo"
+                  value={newReservation.articulo_id}
+                  onChange={(e) => setNewReservation({ ...newReservation, articulo_id: e.target.value })}
+                  required
+                  error={!newReservation.articulo_id}
+                  helperText={!newReservation.articulo_id ? 'Este campo es requerido' : ''}
+                >
+                  {equipment.map((item) => (
+                    <MenuItem key={item.id} value={item.id}>
+                      {item.nombre}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
 
-          <TextField
-            select
-            fullWidth
-            margin="normal"
-            name="articulo_id"
-            label="Equipo"
-            value={newReservation.articulo_id}
-            onChange={(e) => setNewReservation({ ...newReservation, articulo_id: e.target.value })}
-          >
-            {equipment.map((item) => (
-              <MenuItem key={item.id} value={item.id}>
-                {item.nombre}
-              </MenuItem>
-            ))}
-          </TextField>
+              <Grid xs={12} sm={6}>
+                <TextField
+                  select
+                  fullWidth
+                  name="cliente_id"
+                  label="Cliente"
+                  value={newReservation.cliente_id}
+                  onChange={(e) => setNewReservation({ ...newReservation, cliente_id: e.target.value })}
+                  required
+                  error={!newReservation.cliente_id}
+                  helperText={!newReservation.cliente_id ? 'Este campo es requerido' : ''}
+                >
+                  {clients.map((client) => (
+                    <MenuItem key={client.id} value={client.id}>
+                      {`${client.nombre} ${client.apellido}`}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
 
-          <TextField
-            fullWidth
-            margin="normal"
-            name="fecha_inicio"
-            label="Fecha Inicio"
-            type="date"
-            value={newReservation.fecha_inicio}
-            onChange={(e) => setNewReservation({ ...newReservation, fecha_inicio: e.target.value })}
-            InputLabelProps={{ shrink: true }}
-          />
+              <Grid xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="fecha_inicio"
+                  label="Fecha Inicio"
+                  type="date"
+                  value={dayjs(newReservation.fecha_inicio).format('YYYY-MM-DD')}
+                  onChange={(e) => setNewReservation({ ...newReservation, fecha_inicio: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                  required
+                  error={!newReservation.fecha_inicio}
+                  helperText={!newReservation.fecha_inicio ? 'Este campo es requerido' : ''}
+                />
+              </Grid>
 
-          <TextField
-            fullWidth
-            margin="normal"
-            name="fecha_fin"
-            label="Fecha Fin"
-            type="date"
-            value={newReservation.fecha_fin}
-            onChange={(e) => setNewReservation({ ...newReservation, fecha_fin: e.target.value })}
-            InputLabelProps={{ shrink: true }}
-          />
+              <Grid xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="fecha_fin"
+                  label="Fecha Fin"
+                  type="date"
+                  value={dayjs(newReservation.fecha_fin).format('YYYY-MM-DD')}
+                  onChange={(e) => setNewReservation({ ...newReservation, fecha_fin: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                  required
+                  error={!newReservation.fecha_fin}
+                  helperText={!newReservation.fecha_fin ? 'Este campo es requerido' : ''}
+                />
+              </Grid>
 
-          <TextField
-            fullWidth
-            margin="normal"
-            name="notas"
-            label="Notas"
-            multiline
-            rows={4}
-            value={newReservation.notas}
-            onChange={(e) => setNewReservation({ ...newReservation, notas: e.target.value })}
-          />
+              <Grid xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  name="fecha_reserva"
+                  label="Fecha Reserva"
+                  type="date"
+                  value={dayjs(newReservation.fecha_reserva).format('YYYY-MM-DD')}
+                  onChange={(e) => setNewReservation({ ...newReservation, fecha_reserva: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                  disabled
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  select
+                  fullWidth
+                  name="estado"
+                  label="Estado"
+                  value={newReservation.estado}
+                  onChange={(e) => setNewReservation({ ...newReservation, estado: e.target.value })}
+                >
+                  <MenuItem value="pendiente">Pendiente</MenuItem>
+                  <MenuItem value="confirmada">Confirmada</MenuItem>
+                  <MenuItem value="cancelada">Cancelada</MenuItem>
+                </TextField>
+              </Grid>
+
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  name="notas"
+                  label="Notas"
+                  multiline
+                  rows={4}
+                  value={newReservation.notas}
+                  onChange={(e) => setNewReservation({ ...newReservation, notas: e.target.value })}
+                  placeholder="Agregue notas o comentarios adicionales sobre la reserva"
+                />
+              </Grid>
+            </Grid>
+          </Box>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setOpenDialog(false)}>Cancelar</Button>
           <Button onClick={handleSubmit} variant="contained" color="primary">
             {isEditing ? 'Guardar' : 'Crear'}
@@ -326,8 +386,8 @@ function Reservations() {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Cliente</TableCell>
-              <TableCell>Equipo</TableCell>
+              <TableCell>Articulo</TableCell>
+              <TableCell>Cliente</TableCell>              
               <TableCell>Fecha Reserva</TableCell>
               <TableCell>Fecha Inicio</TableCell>
               <TableCell>Fecha Fin</TableCell>
@@ -341,8 +401,8 @@ function Reservations() {
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
               .map((reservation) => (
                 <TableRow key={reservation.id}>
-                  <TableCell>{reservation.cliente_nombre}</TableCell>
-                  <TableCell>{reservation.articulo_nombre}</TableCell>
+                  <TableCell>{reservation.equipo_nombre}</TableCell>
+                  <TableCell>{reservation.cliente_nombre}</TableCell>                  
                   <TableCell>{new Date(reservation.fecha_reserva).toLocaleDateString()}</TableCell>
                   <TableCell>{new Date(reservation.fecha_inicio).toLocaleDateString()}</TableCell>
                   <TableCell>{new Date(reservation.fecha_fin).toLocaleDateString()}</TableCell>
